@@ -11,30 +11,35 @@ const COLOR_LABELS: Record<string, string> = {
 };
 
 export default function App() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animRef   = useRef<number>(0);
-  const tickRef   = useRef(0);
+  const canvasRef   = useRef<HTMLCanvasElement>(null);
+  const animRef     = useRef<number>(0);
+  const tickRef     = useRef(0);
   const lastTimeRef = useRef(0);
 
   const [gameState, setGameState] = useState<GameState>('idle');
-  const [rankings, setRankings]   = useState<Racer[]>([]);
-  const [winner, setWinner]       = useState<Racer | null>(null);
+  const [rankings,  setRankings]  = useState<Racer[]>([]);
+  const [winner,    setWinner]    = useState<Racer | null>(null);
+  const [currentSeed, setCurrentSeed] = useState<number | null>(null);
+  const [seedInput, setSeedInput] = useState('');
   const winnerRef = useRef<Racer | null>(null);
 
   const racersRef      = useRef<Racer[]>([]);
   const mapRef         = useRef(buildMap());
   const finishCountRef = useRef({ value: 0 });
 
-  const resetGame = useCallback(() => {
+  const resetGame = useCallback((seed?: number) => {
+    const map = buildMap(seed);
+    mapRef.current         = map;
     racersRef.current      = spawnRacers();
-    mapRef.current         = buildMap();
     finishCountRef.current = { value: 0 };
     winnerRef.current      = null;
+    setCurrentSeed(map.seed);
+    setSeedInput(String(map.seed));
     setRankings([...racersRef.current]);
     setWinner(null);
   }, []);
 
-  // Draw initial idle frame
+  // Draw initial frame
   useEffect(() => {
     resetGame();
     const canvas = canvasRef.current;
@@ -43,10 +48,33 @@ export default function App() {
     render(ctx, racersRef.current, mapRef.current.platforms, mapRef.current.checkpoints, mapRef.current.finish, 0);
   }, [resetGame]);
 
+  // Re-draw when map changes in idle state
+  useEffect(() => {
+    if (gameState !== 'idle') return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    render(ctx, racersRef.current, mapRef.current.platforms, mapRef.current.checkpoints, mapRef.current.finish, 0);
+  }, [currentSeed, gameState]);
+
   const startRace = useCallback(() => {
-    resetGame();
+    resetGame(currentSeed ?? undefined);
     setGameState('racing');
+  }, [resetGame, currentSeed]);
+
+  const randomizeMap = useCallback(() => {
+    const newSeed = (Math.random() * 0xffffffff) | 0;
+    resetGame(newSeed);
+    setGameState('idle');
   }, [resetGame]);
+
+  const applySeed = useCallback(() => {
+    const parsed = parseInt(seedInput, 10);
+    if (!isNaN(parsed)) {
+      resetGame(parsed);
+      setGameState('idle');
+    }
+  }, [resetGame, seedInput]);
 
   // Game loop
   useEffect(() => {
@@ -138,10 +166,26 @@ export default function App() {
 
           <div className="legend">
             <h3>Legend</h3>
-            <div className="legend-item"><div className="swatch" style={{ background: '#8B5E3C' }} /><span>Spike (slow)</span></div>
-            <div className="legend-item"><div className="swatch" style={{ background: '#4a5568' }} /><span>Baffle wall</span></div>
+            <div className="legend-item"><div className="swatch" style={{ background: '#374a65' }} /><span>Barrier / shelf</span></div>
             <div className="legend-item"><div className="swatch" style={{ background: '#ff7700', borderRadius: '50%' }} /><span>Checkpoint</span></div>
             <div className="legend-item"><div className="swatch" style={{ background: '#00cc44' }} /><span>Finish zone</span></div>
+          </div>
+
+          {/* Seed panel */}
+          <div className="seed-panel">
+            <h3>🌱 Seed</h3>
+            <div className="seed-row">
+              <input
+                className="seed-input"
+                type="number"
+                value={seedInput}
+                onChange={e => setSeedInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && applySeed()}
+                placeholder="seed"
+              />
+              <button className="btn btn-seed" onClick={applySeed} title="Load this seed">↵</button>
+            </div>
+            <p className="dim seed-hint">Same seed = same map</p>
           </div>
         </div>
       </div>
@@ -151,11 +195,11 @@ export default function App() {
         <button className="btn btn-start" onClick={startRace} disabled={gameState === 'racing'}>
           🚀 Start Race
         </button>
-        <button className="btn btn-reset" onClick={() => { resetGame(); setGameState('idle'); }}>
+        <button className="btn btn-reset" onClick={() => { resetGame(currentSeed ?? undefined); setGameState('idle'); }}>
           🔄 Reset
         </button>
-        <button className="btn btn-random" onClick={() => { resetGame(); setGameState('idle'); }}>
-          🎲 Randomize
+        <button className="btn btn-random" onClick={randomizeMap}>
+          🎲 New Map
         </button>
       </div>
     </div>
