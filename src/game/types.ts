@@ -26,7 +26,7 @@ export interface Checkpoint {
   x: number;
   y: number;
   radius: number;
-  passed: boolean[];  // one per racer
+  passed: boolean[];
 }
 
 export interface FinishZone {
@@ -41,6 +41,4 @@ export type GameState = 'idle' | 'racing' | 'finished';
 export interface GameConfig {
   canvasWidth: number;
   canvasHeight: number;
-  gravity: number;
-  friction: number;
 }

@@ -1,9 +1,12 @@
 import type { Racer, Platform, Checkpoint, FinishZone } from './types';
-import { HEX_COLORS } from './engine';
+import { HEX_COLORS, CANVAS_W, CANVAS_H } from './engine';
 
-const CHECKER_SIZE = 15;
+const CHECKER_SIZE = 18;
 
-function drawCheckerboard(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+function drawCheckerboard(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, w: number, h: number,
+) {
   ctx.save();
   ctx.beginPath();
   ctx.rect(x, y, w, h);
@@ -17,9 +20,9 @@ function drawCheckerboard(ctx: CanvasRenderingContext2D, x: number, y: number, w
     }
   }
   ctx.restore();
-  // Green overlay
+  // green tint
   ctx.save();
-  ctx.globalAlpha = 0.35;
+  ctx.globalAlpha = 0.3;
   ctx.fillStyle = '#00cc44';
   ctx.fillRect(x, y, w, h);
   ctx.globalAlpha = 1;
@@ -31,147 +34,145 @@ function drawCheckerboard(ctx: CanvasRenderingContext2D, x: number, y: number, w
 
 function drawPlatform(ctx: CanvasRenderingContext2D, p: Platform) {
   if (p.type === 'spike') {
-    // Brown base
     ctx.fillStyle = '#8B5E3C';
     ctx.fillRect(p.x, p.y, p.width, p.height);
-    // Fence-like texture lines
+    // fence lines
     ctx.strokeStyle = '#5a3a1a';
     ctx.lineWidth = 1.5;
-    const spacing = 12;
-    const count = Math.floor(p.width / spacing);
-    for (let i = 0; i <= count; i++) {
-      const lx = p.x + i * spacing;
-      ctx.beginPath();
-      ctx.moveTo(lx, p.y);
-      ctx.lineTo(lx, p.y + p.height);
-      ctx.stroke();
+    const isHoriz = p.width > p.height;
+    if (isHoriz) {
+      const spacing = 12;
+      for (let lx = p.x; lx < p.x + p.width; lx += spacing) {
+        ctx.beginPath(); ctx.moveTo(lx, p.y); ctx.lineTo(lx, p.y + p.height); ctx.stroke();
+      }
+      // top spikes
+      ctx.fillStyle = '#6b3a1f';
+      const sw = 8;
+      for (let sx = p.x; sx < p.x + p.width; sx += sw) {
+        ctx.beginPath();
+        ctx.moveTo(sx, p.y);
+        ctx.lineTo(sx + sw / 2, p.y - 7);
+        ctx.lineTo(sx + sw, p.y);
+        ctx.closePath();
+        ctx.fill();
+      }
+    } else {
+      // vertical spike block — spikes face left
+      const sw = 8;
+      for (let sy = p.y; sy < p.y + p.height; sy += sw) {
+        ctx.beginPath();
+        ctx.moveTo(p.x, sy);
+        ctx.lineTo(p.x - 7, sy + sw / 2);
+        ctx.lineTo(p.x, sy + sw);
+        ctx.closePath();
+        ctx.fill();
+      }
     }
-    // Top spikes
-    ctx.fillStyle = '#6b3a1f';
-    const spikeW = 8;
-    const spikeCount = Math.floor(p.width / spikeW);
-    for (let i = 0; i < spikeCount; i++) {
-      const sx = p.x + i * spikeW;
-      ctx.beginPath();
-      ctx.moveTo(sx, p.y);
-      ctx.lineTo(sx + spikeW / 2, p.y - 7);
-      ctx.lineTo(sx + spikeW, p.y);
-      ctx.closePath();
-      ctx.fill();
-    }
-    // Border
     ctx.strokeStyle = '#4a2a0f';
     ctx.lineWidth = 1;
     ctx.strokeRect(p.x, p.y, p.width, p.height);
-  } else if (p.height < 20 && p.width > 50) {
-    // Zig-zag platform: gray
-    ctx.fillStyle = '#b0b0b0';
+  } else {
+    // normal baffle — dark slate
+    ctx.fillStyle = '#4a5568';
     ctx.fillRect(p.x, p.y, p.width, p.height);
-    ctx.strokeStyle = '#888';
-    ctx.lineWidth = 1;
+    // highlight edge
+    ctx.strokeStyle = '#718096';
+    ctx.lineWidth = 1.5;
     ctx.strokeRect(p.x, p.y, p.width, p.height);
-    // Hatching
-    ctx.strokeStyle = '#999';
-    ctx.lineWidth = 0.5;
-    const step = 10;
-    for (let offset = 0; offset < p.width + p.height; offset += step) {
+    // hatching
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(p.x, p.y, p.width, p.height);
+    ctx.clip();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    const step = 8;
+    for (let off = 0; off < p.width + p.height + step; off += step) {
       ctx.beginPath();
-      ctx.moveTo(p.x + offset, p.y);
-      ctx.lineTo(p.x + offset - p.height, p.y + p.height);
+      ctx.moveTo(p.x + off, p.y);
+      ctx.lineTo(p.x + off - p.height, p.y + p.height);
       ctx.stroke();
     }
-  } else {
-    // Wall/separator: dark gray
-    ctx.fillStyle = '#555';
-    ctx.fillRect(p.x, p.y, p.width, p.height);
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(p.x, p.y, p.width, p.height);
+    ctx.restore();
   }
 }
 
-function drawCheckpoint(ctx: CanvasRenderingContext2D, cp: Checkpoint, _racers: Racer[]) {
+function drawCheckpoint(ctx: CanvasRenderingContext2D, cp: Checkpoint) {
   const anyPassed = cp.passed.some(Boolean);
-  // Outer circle
   ctx.beginPath();
   ctx.arc(cp.x, cp.y, cp.radius, 0, Math.PI * 2);
-  ctx.fillStyle = anyPassed ? '#ff7700' : '#ffaa44';
+  ctx.fillStyle = anyPassed ? '#ff7700' : '#ffcc44';
   ctx.fill();
-  ctx.strokeStyle = anyPassed ? '#cc4400' : '#cc7700';
+  ctx.strokeStyle = anyPassed ? '#cc4400' : '#cc9900';
   ctx.lineWidth = 2;
   ctx.stroke();
-  // Triangle inside
+  // triangle
+  const r = cp.radius;
   ctx.beginPath();
-  ctx.moveTo(cp.x, cp.y - cp.radius * 0.6);
-  ctx.lineTo(cp.x + cp.radius * 0.5, cp.y + cp.radius * 0.4);
-  ctx.lineTo(cp.x - cp.radius * 0.5, cp.y + cp.radius * 0.4);
+  ctx.moveTo(cp.x, cp.y - r * 0.55);
+  ctx.lineTo(cp.x + r * 0.48, cp.y + r * 0.38);
+  ctx.lineTo(cp.x - r * 0.48, cp.y + r * 0.38);
   ctx.closePath();
   ctx.fillStyle = anyPassed ? '#fff' : '#333';
   ctx.fill();
 }
 
-function drawRacer(ctx: CanvasRenderingContext2D, r: Racer, alpha = 1) {
+function drawRacer(ctx: CanvasRenderingContext2D, r: Racer) {
   const hex = HEX_COLORS[r.color];
   const half = r.size / 2;
 
   // Trail
   for (let i = 0; i < r.trail.length; i++) {
     const t = r.trail[i];
-    const trailAlpha = (i / r.trail.length) * 0.3 * alpha;
-    ctx.globalAlpha = trailAlpha;
+    const a = (i / r.trail.length) * 0.28;
+    ctx.globalAlpha = a;
     ctx.fillStyle = hex;
-    const ts = r.size * 0.4 * (i / r.trail.length);
+    const ts = r.size * 0.35 * (i / r.trail.length);
     ctx.fillRect(t.x - ts / 2, t.y - ts / 2, ts, ts);
   }
-  ctx.globalAlpha = alpha;
+  ctx.globalAlpha = 1;
 
   // Stun flash
-  if (r.stunTimer > 0 && Math.floor(r.stunTimer / 4) % 2 === 0) {
+  if (r.stunTimer > 0 && Math.floor(r.stunTimer / 3) % 2 === 0) {
     ctx.fillStyle = '#ffffff';
   } else {
     ctx.fillStyle = hex;
   }
 
-  // Shadow
-  ctx.shadowColor = 'rgba(0,0,0,0.3)';
-  ctx.shadowBlur = 6;
+  ctx.shadowColor = 'rgba(0,0,0,0.35)';
+  ctx.shadowBlur = 8;
   ctx.shadowOffsetY = 3;
-
   ctx.fillRect(r.x - half, r.y - half, r.size, r.size);
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
 
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
-
-  // Border
-  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
   ctx.lineWidth = 1.5;
   ctx.strokeRect(r.x - half, r.y - half, r.size, r.size);
 
-  // Eyes
+  // Eyes — face right
   ctx.fillStyle = '#fff';
-  ctx.fillRect(r.x - 6, r.y - 5, 4, 5);
-  ctx.fillRect(r.x + 2, r.y - 5, 4, 5);
+  ctx.fillRect(r.x + 2, r.y - 6, 4, 5);
+  ctx.fillRect(r.x + 2, r.y + 2, 4, 5);
   ctx.fillStyle = '#000';
-  ctx.fillRect(r.x - 5, r.y - 4, 2, 3);
-  ctx.fillRect(r.x + 3, r.y - 4, 2, 3);
-
-  ctx.globalAlpha = 1;
+  ctx.fillRect(r.x + 4, r.y - 5, 2, 3);
+  ctx.fillRect(r.x + 4, r.y + 3, 2, 3);
 }
 
-function drawStartingGateLabels(ctx: CanvasRenderingContext2D) {
-  const colors: Array<[string, number]> = [
-    ['#e84040', 68],
-    ['#4070e8', 205],
-    ['#f0c030', 342],
-    ['#40c060', 479],
-  ];
-  for (const [color, cx] of colors) {
-    ctx.fillStyle = color;
-    ctx.globalAlpha = 0.12;
-    ctx.fillRect(cx - 60, 700, 120, 80);
-    ctx.globalAlpha = 1;
+function drawLaneStripes(ctx: CanvasRenderingContext2D) {
+  // subtle horizontal lane guidelines
+  const lanes = 4;
+  const laneH = (CANVAS_H - 28) / lanes;
+  ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < lanes; i++) {
+    const ly = 14 + i * laneH;
+    ctx.beginPath();
+    ctx.setLineDash([8, 8]);
+    ctx.moveTo(14, ly);
+    ctx.lineTo(CANVAS_W - 60, ly);
+    ctx.stroke();
   }
+  ctx.setLineDash([]);
 }
 
 export function render(
@@ -182,53 +183,43 @@ export function render(
   finish: FinishZone,
   tick: number,
 ) {
-  const W = ctx.canvas.width;
-  const H = ctx.canvas.height;
-
   // Background
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#1a1f2e';
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-  // Subtle grid
-  ctx.strokeStyle = '#f0f0f0';
-  ctx.lineWidth = 0.5;
-  for (let gx = 0; gx < W; gx += 30) {
-    ctx.beginPath(); ctx.moveTo(gx, 0); ctx.lineTo(gx, H); ctx.stroke();
-  }
-  for (let gy = 0; gy < H; gy += 30) {
-    ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
-  }
-
-  // Starting gate lane highlights
-  drawStartingGateLabels(ctx);
+  drawLaneStripes(ctx);
 
   // Platforms
   for (const p of platforms) {
-    // Skip walls (too wide or invisible sentinels)
-    if (p.x < 0 || p.x >= W) continue;
     drawPlatform(ctx, p);
   }
 
   // Checkpoints
   for (const cp of checkpoints) {
-    drawCheckpoint(ctx, cp, racers);
+    drawCheckpoint(ctx, cp);
   }
 
   // Finish zone
   drawCheckerboard(ctx, finish.x, finish.y, finish.width, finish.height);
-  ctx.fillStyle = '#00aa33';
-  ctx.font = 'bold 11px monospace';
-  ctx.fillText('FINISH', finish.x + 14, finish.y + 35);
+  ctx.fillStyle = '#00ee55';
+  ctx.font = 'bold 12px monospace';
+  ctx.save();
+  ctx.translate(finish.x + finish.width / 2, finish.y + finish.height / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText('FINISH', -24, 4);
+  ctx.restore();
 
   // Racers
   for (const r of racers) {
-    drawRacer(ctx, r, r.finished ? 0.5 : 1);
+    ctx.globalAlpha = r.finished ? 0.45 : 1;
+    drawRacer(ctx, r);
+    ctx.globalAlpha = 1;
   }
 
-  // Finish banner pulse
+  // Finish pulse
   if (racers.some(r => r.finished)) {
-    const pulse = 0.5 + 0.5 * Math.sin(tick * 0.1);
-    ctx.strokeStyle = `rgba(0, 200, 80, ${pulse})`;
+    const pulse = 0.5 + 0.5 * Math.sin(tick * 0.12);
+    ctx.strokeStyle = `rgba(0,220,80,${pulse})`;
     ctx.lineWidth = 4;
     ctx.strokeRect(finish.x, finish.y, finish.width, finish.height);
   }

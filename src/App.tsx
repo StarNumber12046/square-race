@@ -1,52 +1,40 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import type { Racer, GameState } from './game/types';
-import { buildMap, spawnRacers, stepPhysics, getRankings, config, HEX_COLORS } from './game/engine';
+import { buildMap, spawnRacers, stepPhysics, getRankings, HEX_COLORS, CANVAS_W, CANVAS_H } from './game/engine';
 import { render } from './game/renderer';
 import './App.css';
 
 const TICK_MS = 1000 / 60;
-
 const RANK_LABELS = ['🥇', '🥈', '🥉', '4th'];
 const COLOR_LABELS: Record<string, string> = {
-  red: 'Red',
-  blue: 'Blue',
-  yellow: 'Yellow',
-  green: 'Green',
+  red: 'Red', blue: 'Blue', yellow: 'Yellow', green: 'Green',
 };
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animRef = useRef<number>(0);
-  const tickRef = useRef(0);
+  const animRef   = useRef<number>(0);
+  const tickRef   = useRef(0);
   const lastTimeRef = useRef(0);
 
   const [gameState, setGameState] = useState<GameState>('idle');
-  const [rankings, setRankings] = useState<Racer[]>([]);
-  const [winner, setWinner] = useState<Racer | null>(null);
+  const [rankings, setRankings]   = useState<Racer[]>([]);
+  const [winner, setWinner]       = useState<Racer | null>(null);
+  const winnerRef = useRef<Racer | null>(null);
 
-  // Game data stored in refs so animation loop doesn't re-create
-  const racersRef = useRef<Racer[]>([]);
-  const mapRef = useRef(buildMap());
+  const racersRef      = useRef<Racer[]>([]);
+  const mapRef         = useRef(buildMap());
   const finishCountRef = useRef({ value: 0 });
 
   const resetGame = useCallback(() => {
-    racersRef.current = spawnRacers();
-    mapRef.current = buildMap();
+    racersRef.current      = spawnRacers();
+    mapRef.current         = buildMap();
     finishCountRef.current = { value: 0 };
+    winnerRef.current      = null;
     setRankings([...racersRef.current]);
     setWinner(null);
   }, []);
 
-  const randomizeMap = useCallback(() => {
-    mapRef.current = buildMap(); // future: randomize obstacle layout
-    racersRef.current = spawnRacers();
-    finishCountRef.current = { value: 0 };
-    setRankings([...racersRef.current]);
-    setWinner(null);
-    setGameState('idle');
-  }, []);
-
-  // Initial render (idle state)
+  // Draw initial idle frame
   useEffect(() => {
     resetGame();
     const canvas = canvasRef.current;
@@ -63,7 +51,6 @@ export default function App() {
   // Game loop
   useEffect(() => {
     if (gameState !== 'racing') return;
-
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
@@ -73,20 +60,9 @@ export default function App() {
         lastTimeRef.current = timestamp;
         tickRef.current++;
 
-        const racers = racersRef.current;
+        const racers      = racersRef.current;
         const { platforms, checkpoints, finish } = mapRef.current;
         const finishCount = finishCountRef.current;
-
-        // Give periodic upward impulses to racers that are stuck
-        for (const r of racers) {
-          if (!r.finished) {
-            // Random upward nudge every ~120 ticks per racer
-            if (Math.random() < 0.012) {
-              r.vy -= 4 + Math.random() * 3;
-              r.vx += (Math.random() - 0.5) * 3;
-            }
-          }
-        }
 
         stepPhysics(racers, platforms, checkpoints, finish, finishCount);
         render(ctx, racers, platforms, checkpoints, finish, tickRef.current);
@@ -94,37 +70,34 @@ export default function App() {
         const ranked = getRankings(racers);
         setRankings([...ranked]);
 
-        const allFinished = racers.every(r => r.finished);
-        const anyFinished = racers.some(r => r.finished);
-
-        if (anyFinished && !winner) {
+        if (!winnerRef.current) {
           const w = racers.find(r => r.finishRank === 1);
-          if (w) setWinner({ ...w });
+          if (w) { winnerRef.current = { ...w }; setWinner({ ...w }); }
         }
 
-        if (allFinished) {
+        if (racers.every(r => r.finished)) {
           setGameState('finished');
           return;
         }
       }
-
       animRef.current = requestAnimationFrame(loop);
     };
 
     animRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animRef.current);
-  }, [gameState, winner]);
+  }, [gameState]);
 
   return (
     <div className="app">
       <h1 className="title">⬛ Square Race</h1>
+
       <div className="main-layout">
         {/* Canvas */}
         <div className="canvas-wrapper">
           <canvas
             ref={canvasRef}
-            width={config.canvasWidth}
-            height={config.canvasHeight}
+            width={CANVAS_W}
+            height={CANVAS_H}
             className="game-canvas"
           />
           {gameState === 'idle' && (
@@ -144,7 +117,6 @@ export default function App() {
 
         {/* Sidebar */}
         <div className="sidebar">
-          {/* Leaderboard */}
           <div className="leaderboard">
             <h2>🏁 Standings</h2>
             {rankings.length === 0
@@ -156,10 +128,7 @@ export default function App() {
                   style={{ borderLeft: `4px solid ${HEX_COLORS[r.color]}` }}
                 >
                   <span className="rank-label">{RANK_LABELS[i]}</span>
-                  <span
-                    className="racer-name"
-                    style={{ color: HEX_COLORS[r.color] }}
-                  >
+                  <span className="racer-name" style={{ color: HEX_COLORS[r.color] }}>
                     {COLOR_LABELS[r.color]}
                   </span>
                   {r.finished && <span className="done-badge">✓</span>}
@@ -167,48 +136,25 @@ export default function App() {
               ))}
           </div>
 
-          {/* Legend */}
           <div className="legend">
             <h3>Legend</h3>
-            <div className="legend-item">
-              <div className="swatch" style={{ background: '#8B5E3C' }} />
-              <span>Spike block (slow)</span>
-            </div>
-            <div className="legend-item">
-              <div className="swatch" style={{ background: '#b0b0b0' }} />
-              <span>Platform</span>
-            </div>
-            <div className="legend-item">
-              <div className="swatch" style={{ background: '#ff7700', borderRadius: '50%' }} />
-              <span>Checkpoint</span>
-            </div>
-            <div className="legend-item">
-              <div className="swatch" style={{ background: '#00cc44' }} />
-              <span>Finish zone</span>
-            </div>
+            <div className="legend-item"><div className="swatch" style={{ background: '#8B5E3C' }} /><span>Spike (slow)</span></div>
+            <div className="legend-item"><div className="swatch" style={{ background: '#4a5568' }} /><span>Baffle wall</span></div>
+            <div className="legend-item"><div className="swatch" style={{ background: '#ff7700', borderRadius: '50%' }} /><span>Checkpoint</span></div>
+            <div className="legend-item"><div className="swatch" style={{ background: '#00cc44' }} /><span>Finish zone</span></div>
           </div>
         </div>
       </div>
 
       {/* Controls */}
       <div className="controls">
-        <button
-          className="btn btn-start"
-          onClick={startRace}
-          disabled={gameState === 'racing'}
-        >
+        <button className="btn btn-start" onClick={startRace} disabled={gameState === 'racing'}>
           🚀 Start Race
         </button>
-        <button
-          className="btn btn-reset"
-          onClick={() => { resetGame(); setGameState('idle'); }}
-        >
+        <button className="btn btn-reset" onClick={() => { resetGame(); setGameState('idle'); }}>
           🔄 Reset
         </button>
-        <button
-          className="btn btn-random"
-          onClick={randomizeMap}
-        >
+        <button className="btn btn-random" onClick={() => { resetGame(); setGameState('idle'); }}>
           🎲 Randomize
         </button>
       </div>
