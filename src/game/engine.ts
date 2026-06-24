@@ -1,14 +1,12 @@
 import type {
   Racer,
   Platform,
-  Checkpoint,
   FinishZone,
   RacerColor,
 } from './types';
 import { generateMap } from './mapgen';
-
-export const CANVAS_W = 900;
-export const CANVAS_H = 500;
+import { CANVAS_W, CANVAS_H } from './constants';
+export { CANVAS_W, CANVAS_H } from './constants';
 
 const RACER_SIZE = 22;
 const BASE_SPEED = 6;
@@ -25,7 +23,6 @@ export const HEX_COLORS: Record<RacerColor, string> = {
 
 export function buildMap(seed?: number): {
   platforms: Platform[];
-  checkpoints: Checkpoint[];
   finish: FinishZone;
   seed: number;
 } {
@@ -116,15 +113,24 @@ function resolveRacerRacer(a: Racer, b: Racer) {
   }
 }
 
+const STUN_DURATION = 30; // frames of stun when hitting a spike
+
 export function stepPhysics(
   racers: Racer[],
   platforms: Platform[],
-  checkpoints: Checkpoint[],
   finish: FinishZone,
   finishCount: { value: number },
 ) {
   for (const r of racers) {
     if (r.finished) continue;
+
+    // Stun timer — racer frozen in place
+    if (r.stunTimer > 0) {
+      r.stunTimer--;
+      r.trail.push({ x: r.x, y: r.y });
+      if (r.trail.length > 20) r.trail.shift();
+      continue;
+    }
 
     r.x += r.vx;
     r.y += r.vy;
@@ -141,7 +147,19 @@ export function stepPhysics(
       }
     }
 
-    for (const p of platforms) resolveRacerPlatform(r, p);
+    for (const p of platforms) {
+      resolveRacerPlatform(r, p);
+      // Spike collision — stun and deflect
+      if (p.type === 'spike') {
+        const half = r.size / 2;
+        if (rectOverlap(r.x - half, r.y - half, r.size, r.size, p.x, p.y, p.width, p.height)) {
+          r.stunTimer = STUN_DURATION;
+          // Bounce away from the spike
+          r.vx = -r.vx * 0.6;
+          r.vy = -r.vy * 0.6;
+        }
+      }
+    }
     for (const o of racers) { if (o.id !== r.id && !o.finished) resolveRacerRacer(r, o); }
 
     // Canvas bounds
@@ -154,14 +172,6 @@ export function stepPhysics(
     // Trail
     r.trail.push({ x: r.x, y: r.y });
     if (r.trail.length > 20) r.trail.shift();
-
-    // Checkpoints
-    for (const cp of checkpoints) {
-      if (!cp.passed[r.id]) {
-        if (Math.hypot(r.x - cp.x, r.y - cp.y) < cp.radius + r.size / 2)
-          cp.passed[r.id] = true;
-      }
-    }
 
     // Finish
     if (rectOverlap(r.x-h, r.y-h, r.size, r.size, finish.x, finish.y, finish.width, finish.height)) {

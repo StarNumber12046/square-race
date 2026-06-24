@@ -45,7 +45,7 @@ export default function App() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
-    render(ctx, racersRef.current, mapRef.current.platforms, mapRef.current.checkpoints, mapRef.current.finish, 0);
+    render(ctx, racersRef.current, mapRef.current.platforms, mapRef.current.finish, 0);
   }, [resetGame]);
 
   // Re-draw when map changes in idle state
@@ -54,7 +54,7 @@ export default function App() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
-    render(ctx, racersRef.current, mapRef.current.platforms, mapRef.current.checkpoints, mapRef.current.finish, 0);
+    render(ctx, racersRef.current, mapRef.current.platforms, mapRef.current.finish, 0);
   }, [currentSeed, gameState]);
 
   const startRace = useCallback(() => {
@@ -89,11 +89,11 @@ export default function App() {
         tickRef.current++;
 
         const racers      = racersRef.current;
-        const { platforms, checkpoints, finish } = mapRef.current;
+        const { platforms, finish } = mapRef.current;
         const finishCount = finishCountRef.current;
 
-        stepPhysics(racers, platforms, checkpoints, finish, finishCount);
-        render(ctx, racers, platforms, checkpoints, finish, tickRef.current);
+        stepPhysics(racers, platforms, finish, finishCount);
+        render(ctx, racers, platforms, finish, tickRef.current);
 
         const ranked = getRankings(racers);
         setRankings([...ranked]);
@@ -167,7 +167,7 @@ export default function App() {
           <div className="legend">
             <h3>Legend</h3>
             <div className="legend-item"><div className="swatch" style={{ background: '#374a65' }} /><span>Barrier / shelf</span></div>
-            <div className="legend-item"><div className="swatch" style={{ background: '#ff7700', borderRadius: '50%' }} /><span>Checkpoint</span></div>
+            <div className="legend-item"><div className="swatch" style={{ background: '#8b1a1a', border: '1px solid #ff3333' }} /><span>Spike (stuns!)</span></div>
             <div className="legend-item"><div className="swatch" style={{ background: '#00cc44' }} /><span>Finish zone</span></div>
           </div>
 
