@@ -1,17 +1,15 @@
 import type {
   Racer,
   Platform,
-  Checkpoint,
   FinishZone,
   RacerColor,
 } from './types';
-
-export const CANVAS_W = 900;
-export const CANVAS_H = 500;
+import { generateMap } from './mapgen';
+import { CANVAS_W, CANVAS_H } from './constants';
+export { CANVAS_W, CANVAS_H } from './constants';
 
 const RACER_SIZE = 22;
 const BASE_SPEED = 6;
-const WALL = 12; // border wall thickness
 
 const COLORS: RacerColor[] = ['red', 'blue', 'yellow', 'green'];
 export const HEX_COLORS: Record<RacerColor, string> = {
@@ -21,128 +19,14 @@ export const HEX_COLORS: Record<RacerColor, string> = {
   green:  '#40c060',
 };
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Build a vertical barrier column with named gap openings.
- *  gaps: array of [gapTop, gapBottom] in canvas coords.
- *  Returns the wall segments (the solid parts between / outside the gaps). */
-function vBarrier(
-  x: number,
-  thickness: number,
-  gaps: Array<[number, number]>,
-): Platform[] {
-  const segs: Platform[] = [];
-  let cursor = WALL;
-  const bottom = CANVAS_H - WALL;
-  // Sort gaps top-to-bottom
-  const sorted = [...gaps].sort((a, b) => a[0] - b[0]);
-  for (const [gt, gb] of sorted) {
-    if (cursor < gt) {
-      segs.push({ x, y: cursor, width: thickness, height: gt - cursor, type: 'normal' });
-    }
-    cursor = gb;
-  }
-  if (cursor < bottom) {
-    segs.push({ x, y: cursor, width: thickness, height: bottom - cursor, type: 'normal' });
-  }
-  return segs;
-}
-
-/** Horizontal shelf — full-width minus cutouts at left/right ends to allow entry/exit. */
-function hShelf(
-  y: number,
-  thickness: number,
-  xStart: number,
-  xEnd: number,
-): Platform {
-  return { x: xStart, y, width: xEnd - xStart, height: thickness, type: 'normal' };
-}
-
 // ─── Map ──────────────────────────────────────────────────────────────────────
 
-export function buildMap(): {
+export function buildMap(seed?: number): {
   platforms: Platform[];
-  checkpoints: Checkpoint[];
   finish: FinishZone;
+  seed: number;
 } {
-  const platforms: Platform[] = [];
-
-  // ── Border walls ──────────────────────────────────────────────────────────
-  platforms.push({ x: 0, y: 0,            width: CANVAS_W, height: WALL,   type: 'normal' }); // top
-  platforms.push({ x: 0, y: CANVAS_H-WALL,width: CANVAS_W, height: WALL,   type: 'normal' }); // bottom
-  platforms.push({ x: 0, y: 0,            width: WALL,     height: CANVAS_H,type: 'normal' }); // left
-
-  // ── Column 1  (x=155)  — two gaps: upper-left + lower-right routing ───────
-  //    Gaps: [80,152]  [320,392]
-  platforms.push(...vBarrier(155, 14, [[80, 152], [320, 392]]));
-
-  // ── Horizontal divider between the two col-1 gaps (forces bounce routing) ─
-  //    sits in the mid-section between x=155 and col2, attached to top wall
-  platforms.push(hShelf(130, 12, 155+14, 290));      // top shelf in upper corridor
-  platforms.push(hShelf(340, 12, 155+14, 290));      // floor shelf in lower corridor
-
-  // ── Column 2  (x=290)  — single central gap ───────────────────────────────
-  //    Gap: [195, 267]  (centre of canvas ≈ 250)
-  platforms.push(...vBarrier(290, 14, [[195, 267]]));
-
-  // ── Narrow horizontal tunnel between col2 and col3 ────────────────────────
-  //    Top wall of upper channel and bottom wall of lower channel
-  platforms.push(hShelf( 90, 12, 304, 430));   // upper channel ceiling
-  platforms.push(hShelf(160, 12, 304, 430));   // upper channel floor
-  platforms.push(hShelf(310, 12, 304, 430));   // lower channel ceiling
-  platforms.push(hShelf(390, 12, 304, 430));   // lower channel floor
-
-  // ── Column 3  (x=430)  — three gaps: top, mid, bottom ────────────────────
-  //    Gaps: [WALL,90]  [160,310]  [390,CANVAS_H-WALL]
-  platforms.push(...vBarrier(430, 14, [
-    [WALL, 90],
-    [160, 310],
-    [390, CANVAS_H - WALL],
-  ]));
-
-  // ── Funnel chamber between col3 and col4 ─────────────────────────────────
-  //    Two angled shelves pinching toward the centre tunnel
-  platforms.push(hShelf( 80, 12, 444, 570));   // top pinch
-  platforms.push(hShelf(220, 12, 444, 570));   // upper-mid divider
-  platforms.push(hShelf(270, 12, 444, 570));   // lower-mid divider
-  platforms.push(hShelf(400, 12, 444, 570));   // bottom pinch
-
-  // ── Column 4  (x=570)  — two gaps: upper + lower ─────────────────────────
-  //    Gaps: [80,220]  [270,400]
-  platforms.push(...vBarrier(570, 14, [[80, 220], [270, 400]]));
-
-  // ── S-bend corridors between col4 and col5 ────────────────────────────────
-  platforms.push(hShelf(160, 12, 584, 700));   // upper corridor floor
-  platforms.push(hShelf( 80, 12, 584, 700));   // upper corridor ceiling (joins top wall)
-  platforms.push(hShelf(340, 12, 584, 700));   // lower corridor ceiling
-  platforms.push(hShelf(410, 12, 584, 700));   // lower corridor floor
-
-  // ── Column 5  (x=700)  — single centre-bottom gap ────────────────────────
-  //    Gap: [200, 410]  (wide central opening)
-  platforms.push(...vBarrier(700, 14, [[200, 410]]));
-
-  // ── Final approach corridor (col5 → finish) ───────────────────────────────
-  //    Top and bottom shelves funnel into a central corridor before finish
-  platforms.push(hShelf(200, 12, 714, 838));
-  platforms.push(hShelf(410, 12, 714, 838));
-
-  // ── Checkpoints (centre of each major gap) ───────────────────────────────
-  const checkpoints: Checkpoint[] = [
-    { x: 224, y: 231, radius: 16, passed: [false,false,false,false] }, // col1-2 passage
-    { x: 360, y: 231, radius: 16, passed: [false,false,false,false] }, // col2-3 passage
-    { x: 500, y: 231, radius: 16, passed: [false,false,false,false] }, // col3-4 passage
-    { x: 635, y: 231, radius: 16, passed: [false,false,false,false] }, // col4-5 passage
-  ];
-
-  // ── Finish zone ───────────────────────────────────────────────────────────
-  const finish: FinishZone = {
-    x: CANVAS_W - 62,
-    y: WALL,
-    width: 62,
-    height: CANVAS_H - WALL * 2,
-  };
-
-  return { platforms, checkpoints, finish };
+  return generateMap(seed);
 }
 
 // ─── Racer spawn ──────────────────────────────────────────────────────────────
@@ -229,15 +113,24 @@ function resolveRacerRacer(a: Racer, b: Racer) {
   }
 }
 
+const STUN_DURATION = 30; // frames of stun when hitting a spike
+
 export function stepPhysics(
   racers: Racer[],
   platforms: Platform[],
-  checkpoints: Checkpoint[],
   finish: FinishZone,
   finishCount: { value: number },
 ) {
   for (const r of racers) {
     if (r.finished) continue;
+
+    // Stun timer — racer frozen in place
+    if (r.stunTimer > 0) {
+      r.stunTimer--;
+      r.trail.push({ x: r.x, y: r.y });
+      if (r.trail.length > 20) r.trail.shift();
+      continue;
+    }
 
     r.x += r.vx;
     r.y += r.vy;
@@ -254,7 +147,19 @@ export function stepPhysics(
       }
     }
 
-    for (const p of platforms) resolveRacerPlatform(r, p);
+    for (const p of platforms) {
+      resolveRacerPlatform(r, p);
+      // Spike collision — stun and deflect
+      if (p.type === 'spike') {
+        const half = r.size / 2;
+        if (rectOverlap(r.x - half, r.y - half, r.size, r.size, p.x, p.y, p.width, p.height)) {
+          r.stunTimer = STUN_DURATION;
+          // Bounce away from the spike
+          r.vx = -r.vx * 0.6;
+          r.vy = -r.vy * 0.6;
+        }
+      }
+    }
     for (const o of racers) { if (o.id !== r.id && !o.finished) resolveRacerRacer(r, o); }
 
     // Canvas bounds
@@ -267,14 +172,6 @@ export function stepPhysics(
     // Trail
     r.trail.push({ x: r.x, y: r.y });
     if (r.trail.length > 20) r.trail.shift();
-
-    // Checkpoints
-    for (const cp of checkpoints) {
-      if (!cp.passed[r.id]) {
-        if (Math.hypot(r.x - cp.x, r.y - cp.y) < cp.radius + r.size / 2)
-          cp.passed[r.id] = true;
-      }
-    }
 
     // Finish
     if (rectOverlap(r.x-h, r.y-h, r.size, r.size, finish.x, finish.y, finish.width, finish.height)) {

@@ -1,4 +1,4 @@
-import type { Racer, Platform, Checkpoint, FinishZone } from './types';
+import type { Racer, Platform, FinishZone } from './types';
 import { HEX_COLORS, CANVAS_W, CANVAS_H } from './engine';
 
 const CHECKER_SIZE = 18;
@@ -21,6 +21,33 @@ function drawCheckerboard(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.strokeStyle = '#00aa33'; ctx.lineWidth = 3;
   ctx.strokeRect(x, y, w, h);
   ctx.restore();
+}
+
+function drawSpike(ctx: CanvasRenderingContext2D, p: Platform) {
+  // Red hazard block with diagonal stripes
+  ctx.fillStyle = '#8b1a1a';
+  ctx.fillRect(p.x, p.y, p.width, p.height);
+
+  // Diagonal warning stripes
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(p.x, p.y, p.width, p.height);
+  ctx.clip();
+  ctx.strokeStyle = 'rgba(255,60,60,0.6)';
+  ctx.lineWidth = 2;
+  const stripeGap = 8;
+  for (let d = -p.height; d < p.width + p.height; d += stripeGap) {
+    ctx.beginPath();
+    ctx.moveTo(p.x + d, p.y);
+    ctx.lineTo(p.x + d - p.height, p.y + p.height);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Border glow
+  ctx.strokeStyle = '#ff3333';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(p.x, p.y, p.width, p.height);
 }
 
 function drawWall(ctx: CanvasRenderingContext2D, p: Platform) {
@@ -47,24 +74,6 @@ function drawWall(ctx: CanvasRenderingContext2D, p: Platform) {
   ctx.lineTo(p.x + p.width, p.y + p.height);
   ctx.lineTo(p.x, p.y + p.height);
   ctx.stroke();
-}
-
-function drawCheckpoint(ctx: CanvasRenderingContext2D, cp: Checkpoint) {
-  const anyPassed = cp.passed.some(Boolean);
-  ctx.beginPath();
-  ctx.arc(cp.x, cp.y, cp.radius, 0, Math.PI * 2);
-  ctx.fillStyle = anyPassed ? '#ff7700' : '#ffcc44';
-  ctx.fill();
-  ctx.strokeStyle = anyPassed ? '#cc4400' : '#cc9900';
-  ctx.lineWidth = 2; ctx.stroke();
-  const r = cp.radius;
-  ctx.beginPath();
-  ctx.moveTo(cp.x, cp.y - r * 0.55);
-  ctx.lineTo(cp.x + r * 0.48, cp.y + r * 0.38);
-  ctx.lineTo(cp.x - r * 0.48, cp.y + r * 0.38);
-  ctx.closePath();
-  ctx.fillStyle = anyPassed ? '#fff' : '#333';
-  ctx.fill();
 }
 
 function drawRacer(ctx: CanvasRenderingContext2D, r: Racer) {
@@ -122,7 +131,6 @@ export function render(
   ctx: CanvasRenderingContext2D,
   racers: Racer[],
   platforms: Platform[],
-  checkpoints: Checkpoint[],
   finish: FinishZone,
   tick: number,
 ) {
@@ -132,11 +140,11 @@ export function render(
 
   drawTunnelAmbience(ctx);
 
-  // Walls
-  for (const p of platforms) drawWall(ctx, p);
-
-  // Checkpoints
-  for (const cp of checkpoints) drawCheckpoint(ctx, cp);
+  // Walls and spikes
+  for (const p of platforms) {
+    if (p.type === 'spike') drawSpike(ctx, p);
+    else drawWall(ctx, p);
+  }
 
   // Finish
   drawCheckerboard(ctx, finish.x, finish.y, finish.width, finish.height);
@@ -152,6 +160,26 @@ export function render(
   for (const r of racers) {
     ctx.globalAlpha = r.finished ? 0.4 : 1;
     drawRacer(ctx, r);
+    // Stun indicator — flashing red ring
+    if (r.stunTimer > 0) {
+      const flash = Math.sin(tick * 0.5) > 0 ? 0.8 : 0.3;
+      ctx.globalAlpha = flash;
+      ctx.strokeStyle = '#ff2222';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(r.x, r.y, r.size * 0.7, 0, Math.PI * 2);
+      ctx.stroke();
+      // "X" eyes
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#ff0000';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(r.x + 1, r.y - 5); ctx.lineTo(r.x + 5, r.y - 1);
+      ctx.moveTo(r.x + 5, r.y - 5); ctx.lineTo(r.x + 1, r.y - 1);
+      ctx.moveTo(r.x + 1, r.y + 2); ctx.lineTo(r.x + 5, r.y + 6);
+      ctx.moveTo(r.x + 5, r.y + 2); ctx.lineTo(r.x + 1, r.y + 6);
+      ctx.stroke();
+    }
   }
   ctx.globalAlpha = 1;
 

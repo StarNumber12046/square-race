@@ -22,13 +22,6 @@ export interface Platform {
   type: 'normal' | 'spike';
 }
 
-export interface Checkpoint {
-  x: number;
-  y: number;
-  radius: number;
-  passed: boolean[];
-}
-
 export interface FinishZone {
   x: number;
   y: number;
